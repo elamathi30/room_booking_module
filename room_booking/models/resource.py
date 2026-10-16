@@ -1,3 +1,4 @@
+import pytz
 from odoo import models, fields
 
 
@@ -84,7 +85,7 @@ class RoomBookingResource(models.Model):
         
         return self.env['room.booking.booking'].search(domain)
     
-    def is_within_availability(self, start_time, end_time):
+    def is_within_availability(self, start_time, end_time, tz_name=None):
         """
         Check if booking times fall within resource availability windows.
         
@@ -95,6 +96,11 @@ class RoomBookingResource(models.Model):
         Returns:
             True if within availability, False otherwise
         """
+        tz = pytz.timezone(tz_name or 'UTC')
+        start_time = pytz.utc.localize(start_time).astimezone(tz)
+        end_time = pytz.utc.localize(end_time).astimezone(tz)
+        if start_time.date() != end_time.date():
+            return False
         start_hour = start_time.hour + (start_time.minute / 60.0)
         end_hour = end_time.hour + (end_time.minute / 60.0)
         

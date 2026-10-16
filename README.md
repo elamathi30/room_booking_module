@@ -177,7 +177,7 @@ room_booking/
 
 ## Tech Stack
 
-- **Framework**: Odoo 14+ (uses `mail.thread`, `mail.activity.mixin`)
+- **Framework**: Odoo 18 (uses `mail.thread`, `mail.activity.mixin`)
 - **Language**: Python 3.x
 - **Database**: PostgreSQL (Odoo's default)
 - **Frontend**: Odoo's built-in form/list/tree views (XML-based)

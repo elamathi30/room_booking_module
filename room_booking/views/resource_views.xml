@@ -7,14 +7,14 @@
             <field name="name">Resource List</field>
             <field name="model">room.booking.resource</field>
             <field name="arch" type="xml">
-                <tree>
+                <list>
                     <field name="name"/>
                     <field name="resource_type"/>
                     <field name="capacity"/>
                     <field name="availability_start"/>
                     <field name="availability_end"/>
                     <field name="is_available"/>
-                </tree>
+                </list>
             </field>
         </record>
 
@@ -55,7 +55,7 @@
         <record id="room_booking_resource_action" model="ir.actions.act_window">
             <field name="name">Resources</field>
             <field name="res_model">room.booking.resource</field>
-            <field name="view_mode">tree,form</field>
+            <field name="view_mode">list,form</field>
             <field name="help" type="html">
                 <p class="oe_view_nocontent_create">
                     Click to create a new resource (room or equipment).

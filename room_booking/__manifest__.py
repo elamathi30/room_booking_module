@@ -17,6 +17,7 @@
     'depends': ['base', 'mail'],
     'data': [
         'security/ir.model.access.csv',
+        'data/sequence.xml',
         'views/resource_views.xml',
         'views/booking_views.xml',
     ],

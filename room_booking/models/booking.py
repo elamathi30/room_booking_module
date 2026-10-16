@@ -1,6 +1,6 @@
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError
-from datetime import datetime
+import pytz
 
 
 class RoomBookingBooking(models.Model):
@@ -14,7 +14,7 @@ class RoomBookingBooking(models.Model):
         required=True,
         copy=False,
         readonly=True,
-        default=lambda self: self.env['ir.sequence'].next_by_code('room.booking.booking') or 'New',
+        default='New',
         help='Unique booking identifier'
     )
     
@@ -73,16 +73,25 @@ class RoomBookingBooking(models.Model):
         string='Status',
         required=True,
         default='requested',
-        track_visibility='onchange',
+        tracking=True,
         help='Booking lifecycle state'
     )
     
     notes = fields.Text(
         string='Notes',
-        track_visibility='onchange',
+        tracking=True,
         help='Internal notes about the booking'
     )
     
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('booking_reference', 'New') == 'New':
+                vals['booking_reference'] = (
+                    self.env['ir.sequence'].next_by_code('room.booking.booking') or 'New'
+                )
+        return super().create(vals_list)
+
     @api.depends('start_time', 'end_time')
     def _compute_duration(self):
         """Calculate booking duration in hours."""
@@ -121,7 +130,7 @@ class RoomBookingBooking(models.Model):
                     f'Resource "{resource.name}" is currently unavailable.'
                 )
             
-            if not resource.is_within_availability(booking.start_time, booking.end_time):
+            if not resource.is_within_availability(booking.start_time, booking.end_time, self.env.user.tz):
                 raise ValidationError(
                     f'Booking time {booking.start_time} to {booking.end_time} '
                     f'is outside resource availability hours '
