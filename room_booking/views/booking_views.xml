@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Booking List View -->
+        <record id="room_booking_booking_view_list" model="ir.ui.view">
+            <field name="name">Booking List</field>
+            <field name="model">room.booking.booking</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="booking_reference"/>
+                    <field name="title"/>
+                    <field name="resource_id"/>
+                    <field name="user_id"/>
+                    <field name="start_time"/>
+                    <field name="end_time"/>
+                    <field name="duration_hours"/>
+                    <field name="state"/>
+                </tree>
+            </field>
+        </record>
+
+        <!-- Booking Form View -->
+        <record id="room_booking_booking_view_form" model="ir.ui.view">
+            <field name="name">Booking Form</field>
+            <field name="model">room.booking.booking</field>
+            <field name="arch" type="xml">
+                <form>
+                    <header>
+                        <button name="action_confirm" string="Confirm" 
+                                type="object" class="oe_highlight"
+                                states="requested"/>
+                        <button name="action_complete" string="Complete" 
+                                type="object" class="oe_highlight"
+                                states="confirmed"/>
+                        <button name="action_cancel" string="Cancel" 
+                                type="object" states="requested,confirmed"/>
+                        <field name="state" widget="statusbar" 
+                               statusbar_visible="requested,confirmed,completed"/>
+                    </header>
+                    <sheet>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="booking_reference" readonly="1"/>
+                            </h1>
+                        </div>
+                        
+                        <group>
+                            <group string="Booking Details">
+                                <field name="title" placeholder="What is this booking for?"/>
+                                <field name="user_id" readonly="1"/>
+                                <field name="resource_id" required="1"/>
+                            </group>
+                            <group string="Time Information">
+                                <field name="start_time" required="1"/>
+                                <field name="end_time" required="1"/>
+                                <field name="duration_hours" readonly="1"/>
+                            </group>
+                        </group>
+                        
+                        <group>
+                            <field name="description" placeholder="Additional details..."/>
+                        </group>
+                        
+                        <group>
+                            <field name="notes" placeholder="Internal notes..."/>
+                        </group>
+                    </sheet>
+                    
+                    <div class="oe_chatter">
+                        <field name="message_follower_ids" widget="mail_followers"/>
+                        <field name="activity_ids" widget="mail_activity"/>
+                        <field name="message_ids" widget="mail_thread"/>
+                    </div>
+                </form>
+            </field>
+        </record>
+
+        <!-- Booking Search View -->
+        <record id="room_booking_booking_view_search" model="ir.ui.view">
+            <field name="name">Booking Search</field>
+            <field name="model">room.booking.booking</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="booking_reference"/>
+                    <field name="title"/>
+                    <field name="resource_id"/>
+                    <field name="user_id"/>
+                    <field name="state"/>
+                    <separator/>
+                    <filter name="filter_requested" string="Requested" 
+                            domain="[('state', '=', 'requested')]"/>
+                    <filter name="filter_confirmed" string="Confirmed" 
+                            domain="[('state', '=', 'confirmed')]"/>
+                    <filter name="filter_completed" string="Completed" 
+                            domain="[('state', '=', 'completed')]"/>
+                    <filter name="filter_cancelled" string="Cancelled" 
+                            domain="[('state', '=', 'cancelled')]"/>
+                </search>
+            </field>
+        </record>
+
+        <!-- Booking Action -->
+        <record id="room_booking_booking_action" model="ir.actions.act_window">
+            <field name="name">Bookings</field>
+            <field name="res_model">room.booking.booking</field>
+            <field name="view_mode">tree,form</field>
+            <field name="search_view_id" ref="room_booking_booking_view_search"/>
+            <field name="help" type="html">
+                <p class="oe_view_nocontent_create">
+                    Click to create a new booking.
+                </p>
+            </field>
+        </record>
+
+        <!-- Menu Item for Bookings -->
+        <menuitem id="room_booking_menu_bookings" parent="room_booking_menu_root" 
+                  name="Bookings" action="room_booking_booking_action" sequence="2"/>
+
+    </data>
+</odoo>
