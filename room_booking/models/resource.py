@@ -1,8 +1,10 @@
 # REQ: define bookable rooms/equipment, their availability windows, and
 # overlap lookup. Custom Odoo ORM model; uses Python and pytz for local hours.
 import pytz
-from odoo import models, fields
+from odoo import api, fields, models
+from odoo.exceptions import ValidationError
 
+# Define the RoomBookingResource model for bookable rooms and equipment.
 
 class RoomBookingResource(models.Model):
     _name = 'room.booking.resource'
@@ -14,7 +16,7 @@ class RoomBookingResource(models.Model):
         required=True,
         help='Name of the room or equipment (e.g., "Conference Room A")'
     )
-    
+
     resource_type = fields.Selection(
         [
             ('room', 'Room'),
@@ -26,78 +28,97 @@ class RoomBookingResource(models.Model):
         default='room',
         help='Classify the resource'
     )
-    
+
     capacity = fields.Integer(
         string='Capacity',
         default=1,
         help='Max number of people or usage units'
     )
-    
+
     description = fields.Text(
         string='Description',
         help='Details about this resource'
     )
-    
+
     availability_start = fields.Float(
         string='Available From (Hour)',
         default=9.0,
         help='Availability window start (e.g., 9.0 = 9 AM)'
     )
-    
+
     availability_end = fields.Float(
         string='Available Until (Hour)',
         default=18.0,
         help='Availability window end (e.g., 18.0 = 6 PM)'
     )
-    
+
     is_available = fields.Boolean(
         string='Is Available',
         default=True,
         help='Mark resource as available/unavailable'
     )
-    
+
     booking_ids = fields.One2many(
         'room.booking.booking',
         'resource_id',
         string='Bookings',
         help='All bookings for this resource'
     )
-    
+
+# Constraints and utility methods for resource availability and conflict checking
+# Ensure that availability start is before availability end and capacity is positive.
+
+    @api.constrains('availability_start', 'availability_end', 'capacity')
+    def _check_resource_values(self):
+        """Reject impossible hours and capacities so a resource can't silently block all bookings."""
+        for resource in self:
+            if not (0 <= resource.availability_start < resource.availability_end <= 24):
+                raise ValidationError(
+                    'Availability must start before it ends, within 00:00–24:00.'
+                )
+            if resource.capacity < 1:
+                raise ValidationError('Capacity must be at least 1.')
+# Check for overlapping bookings when creating or updating a booking.
+
     def get_conflicts(self, start_time, end_time, exclude_booking_id=None):
         """
         Find overlapping bookings for this resource.
-        
+
         Args:
             start_time: datetime when booking starts
             end_time: datetime when booking ends
             exclude_booking_id: booking ID to exclude (useful for updates)
-        
+
         Returns:
             Recordset of conflicting bookings
         """
+        self.ensure_one()
         domain = [
             ('resource_id', '=', self.id),
             ('state', 'in', ['requested', 'confirmed']),
             ('start_time', '<', end_time),
             ('end_time', '>', start_time),
         ]
-        
+
         if exclude_booking_id:
             domain.append(('id', '!=', exclude_booking_id))
-        
+
         return self.env['room.booking.booking'].search(domain)
     
+    # Check if a given booking time falls within the resource's availability window.
     def is_within_availability(self, start_time, end_time, tz_name=None):
         """
         Check if booking times fall within resource availability windows.
-        
+
         Args:
             start_time: datetime when booking starts
             end_time: datetime when booking ends
-        
+            tz_name: timezone to evaluate the window in (defaults to UTC)
+
         Returns:
             True if within availability, False otherwise
         """
+        self.ensure_one()
         tz = pytz.timezone(tz_name or 'UTC')
         start_time = pytz.utc.localize(start_time).astimezone(tz)
         end_time = pytz.utc.localize(end_time).astimezone(tz)
@@ -105,6 +126,6 @@ class RoomBookingResource(models.Model):
             return False
         start_hour = start_time.hour + (start_time.minute / 60.0)
         end_hour = end_time.hour + (end_time.minute / 60.0)
-        
-        return (start_hour >= self.availability_start and 
+
+        return (start_hour >= self.availability_start and
                 end_hour <= self.availability_end)
