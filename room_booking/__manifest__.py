@@ -14,6 +14,10 @@
         - Availability windows (business hours support)
         - Booking lifecycle (Requested → Confirmed → Completed/Cancelled)
         - List and form views
+        - Email notifications for booking events
+        - One-hour booking reminders and chatter-based notifications for upcoming bookings
+    
+
     ''',
     'author': 'ela',
     'website': '',

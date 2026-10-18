@@ -28,12 +28,9 @@ the reminder job/template configuration and access entries. It does not create
 duplicate events in Odoo's separate Calendar app; the schedule displays these
 module's booking records in Odoo's calendar view.
 
-**Scope note:** Recurring reservations, multi-step approval and resource
-maintenance/blackout dates are not implemented; see
-[Simplified/Left Out & Why](#simplifiedleft-out--why). The exercise PDF available
-for this review renders as blank image pages in the local viewer, so this map
-traces the requirements documented in this repository rather than claiming a
-word-for-word verification against the original brief.
+**Scope note:** Recurring reservations, multi-step approval, blackout dates and the 
+AI-powered feature are not implemented.
+
 
 ## Features (Base Requirements - Complete)
 
@@ -41,7 +38,7 @@ word-for-word verification against the original brief.
 ✅ **Conflict Prevention**: Overlapping bookings are rejected with clear error messages  
 ✅ **Availability Windows**: Resources have configurable business hours (e.g., 9 AM - 6 PM)  
 ✅ **Booking Lifecycle**: 4-state workflow - Requested → Confirmed → Completed/Cancelled  
-✅ **List View as Default**: Bookings and Resources accessible via tree views  
+✅ **List View as Default**: Bookings and Resources accessible via list views  
 ✅ **Data Model & UX**: Full design control over fields, views, and user flows  
 ✅ **Schedule**: Week/day/month calendar view of bookings, filterable by resource and color-coded by status
 ✅ **One-hour Reminders**: Confirmed bookings generate an Odoo activity and a reminder notification through the booking owner's chosen Odoo notification channel
@@ -231,7 +228,7 @@ room_booking/
 - **Framework**: Odoo 18 (uses `mail.thread`, `mail.activity.mixin`)
 - **Language**: Python 3.x
 - **Database**: PostgreSQL (Odoo's default)
-- **Frontend**: Odoo's built-in form/list/tree views (XML-based)
+- **Frontend**: Odoo's built-in form/list views (XML-based)
 
 ## Next Steps (If Continuing)
 
@@ -241,7 +238,7 @@ room_booking/
 2. **AI Feature** (Bonus: AI-Powered)
    - Turn a natural-language request into a reviewable booking draft, using an approved AI service
 
-4. **Reporting**
+3. **Reporting**
    - Booking utilization by resource
    - User booking history
    - Peak hours analysis
