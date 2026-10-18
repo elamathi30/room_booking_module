@@ -1,3 +1,7 @@
+# Module metadata and installation wiring.
+# REQ: installable Odoo add-on; loads access rules, reference sequence,
+# reminder configuration/template, and resource/booking UI.
+# Odoo built-ins: base ORM, mail integration, XML data loader.
 {
     'name': 'Room Booking Module',
     'version': '1.0',
@@ -11,13 +15,16 @@
         - Booking lifecycle (Requested → Confirmed → Completed/Cancelled)
         - List and form views
     ''',
-    'author': 'Your Name',
+    'author': 'ela',
     'website': '',
     'license': 'LGPL-3',
     'depends': ['base', 'mail'],
     'data': [
+        'security/security.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
+        'data/mail_template.xml',
+        'data/reminder_cron.xml',
         'views/resource_views.xml',
         'views/booking_views.xml',
     ],

@@ -1,3 +1,5 @@
+# REQ: define bookable rooms/equipment, their availability windows, and
+# overlap lookup. Custom Odoo ORM model; uses Python and pytz for local hours.
 import pytz
 from odoo import models, fields
 

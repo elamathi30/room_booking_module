@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- REQ: resource list/form and Room Booking navigation. Odoo built-in
+     list/form views and actions, configured here with custom XML. -->
 <odoo>
     <data>
 
@@ -11,8 +13,8 @@
                     <field name="name"/>
                     <field name="resource_type"/>
                     <field name="capacity"/>
-                    <field name="availability_start"/>
-                    <field name="availability_end"/>
+                    <field name="availability_start" widget="float_time"/>
+                    <field name="availability_end" widget="float_time"/>
                     <field name="is_available"/>
                 </list>
             </field>

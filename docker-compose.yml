@@ -1,3 +1,5 @@
+# Local development stack: Odoo 18, PostgreSQL, and Mailpit for safe
+# reminder-email capture; Docker Compose wires the services together.
 services:
   db:
     image: postgres:15
@@ -9,7 +11,7 @@ services:
       - db-data:/var/lib/postgresql/data
   odoo:
     image: odoo:18.0
-    depends_on: [db]
+    depends_on: [db, mailpit]
     ports: ["8069:8069"]
     environment:
       HOST: db
@@ -17,5 +19,8 @@ services:
       PASSWORD: odoo
     volumes:
       - ./room_booking:/mnt/extra-addons/room_booking
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025"]
 volumes:
   db-data:

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- REQ: provide generated BK/ booking references via Odoo's built-in
+     ir.sequence service. -->
 <odoo noupdate="1">
     <record id="seq_room_booking" model="ir.sequence">
         <field name="name">Room Booking</field>

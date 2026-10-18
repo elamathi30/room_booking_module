@@ -2,6 +2,39 @@
 
 A standalone Odoo module for booking rooms and equipment with conflict prevention, availability windows, and lifecycle management.
 
+## Implementation Map: Requirements, Odoo, and Tools
+
+This map explains which module file covers each documented requirement, what is
+custom code versus Odoo-provided behavior, and the implementation technology.
+
+| Requirement / feature | Implemented in | What this module adds | Odoo built-in / technology |
+|---|---|---|---|
+| Manage rooms and equipment, including availability hours | `models/resource.py`, `views/resource_views.xml` | Custom resource model, resource types, capacity, availability switch and daily hours; list/form screens | Odoo ORM fields and CRUD; XML views |
+| Create and manage bookings, calculate duration and assign references | `models/booking.py`, `data/sequence.xml` | Custom booking model, generated `BK/` reference, owner/resource/time fields and computed duration | Odoo ORM and `ir.sequence`; Python |
+| Prevent invalid times, out-of-hours bookings and overlapping reservations | `models/booking.py`, `models/resource.py` | Custom validation, user-timezone availability checks and overlap detection for requested/confirmed bookings | Odoo model constraints and `ValidationError`; Python / ORM search |
+| Booking lifecycle and required cancellation reason | `models/booking.py`, `models/cancel_wizard.py`, `views/booking_views.xml` | Custom state transitions and completion timing; cancellation dialog requires and stores a reason | Odoo `TransientModel`, form actions and status bar; Python / XML |
+| Booking/resource list and form screens, search and state filters | `views/booking_views.xml`, `views/resource_views.xml` | Custom menus, screens and search filters | Odoo actions, menus, list/form/search views; XML |
+| Schedule view, resource filtering and state colors | `views/booking_views.xml`, `models/booking.py` | Custom calendar action over booking records; filters by resource and maps state to a color value | Odoo calendar view; XML / Python |
+| Track changes, comments and upcoming reminders (extra Odoo integration) | `models/booking.py`, `data/reminder_cron.xml`, `data/mail_template.xml` | Uses Odoo chatter/activity APIs; custom five-minute job schedules a one-hour reminder once per confirmed booking | Odoo `mail.thread`, `mail.activity.mixin`, mail activities, templates and `ir.cron`; Python / XML |
+| Read/write/create/delete access control | `security/security.xml`, `security/ir.model.access.csv` | Room Booking Manager group; internal users read resources and all bookings but create/edit/delete only their own bookings; only managers (and administrators) manage resources and others' bookings | Odoo `res.groups`, `ir.rule`, model access CSV (CSV must keep its header first) |
+| Run and locally test the Odoo module and reminder email capture | `docker-compose.yml`, `tests/test_booking.py` | Local Odoo/PostgreSQL/Mailpit services and automated model tests | Docker Compose, Odoo `TransactionCase`, PostgreSQL, Mailpit |
+
+**What is built in versus custom:** Odoo supplies the ORM, PostgreSQL persistence,
+record CRUD framework, access-control engine, list/form/search/calendar view
+widgets, actions/menus, sequences, mail tracking/activities, templates and
+scheduled-job runner. This module supplies the booking/resource models and
+business rules, the booking workflow and cancellation wizard, its XML screens,
+the reminder job/template configuration and access entries. It does not create
+duplicate events in Odoo's separate Calendar app; the schedule displays these
+module's booking records in Odoo's calendar view.
+
+**Scope note:** Recurring reservations, multi-step approval and resource
+maintenance/blackout dates are not implemented; see
+[Simplified/Left Out & Why](#simplifiedleft-out--why). The exercise PDF available
+for this review renders as blank image pages in the local viewer, so this map
+traces the requirements documented in this repository rather than claiming a
+word-for-word verification against the original brief.
+
 ## Features (Base Requirements - Complete)
 
 ✅ **CRUD on Bookings**: Full read, create, update, delete operations with proper access control  
@@ -10,6 +43,8 @@ A standalone Odoo module for booking rooms and equipment with conflict preventio
 ✅ **Booking Lifecycle**: 4-state workflow - Requested → Confirmed → Completed/Cancelled  
 ✅ **List View as Default**: Bookings and Resources accessible via tree views  
 ✅ **Data Model & UX**: Full design control over fields, views, and user flows  
+✅ **Schedule**: Week/day/month calendar view of bookings, filterable by resource and color-coded by status
+✅ **One-hour Reminders**: Confirmed bookings generate an Odoo activity and a reminder notification through the booking owner's chosen Odoo notification channel
 
 ## Design Decisions
 
@@ -21,7 +56,7 @@ A standalone Odoo module for booking rooms and equipment with conflict preventio
   - `name`: Resource name (e.g., "Conference Room A")
   - `resource_type`: Classification (Room, Equipment, Other)
   - `capacity`: How many people/units can use it
-  - `availability_start` / `availability_end`: Business hours (as floats: 9.0 = 9 AM, 18.0 = 6 PM)
+  - `availability_start` / `availability_end`: Business hours (stored as floats, displayed as times such as 9:00 and 18:00)
   - `is_available`: Boolean flag to disable resource temporarily
   - `booking_ids`: One2many relationship to bookings
 
@@ -37,10 +72,11 @@ A standalone Odoo module for booking rooms and equipment with conflict preventio
   - `title` / `description`: Purpose and details
   - `state`: Lifecycle state (requested, confirmed, completed, cancelled)
   - `notes`: Internal tracking (tracked in chatter)
+  - `cancellation_reason`: Required reason recorded when a booking is cancelled
 
 ### Conflict Detection Strategy
 
-**Location**: Constraints in `booking.py` (`_check_availability_and_conflicts`)
+**Location**: Booking validation in `booking.py`
 
 **Logic**:
 1. **Availability Window Check**: Reject bookings outside resource's business hours
@@ -50,9 +86,9 @@ A standalone Odoo module for booking rooms and equipment with conflict preventio
    - When updating a booking, the existing booking ID is excluded to avoid self-conflict
 
 **Why this approach**:
-- Runs at the database constraint level (reliable, can't bypass)
-- User-friendly error messages with conflict details
-- Efficient: single database query
+- Validation is shown inline while editing and checked again by server-side constraints when saving
+- Conflict messages show the other booking's time in the current user's timezone
+- A single database query finds overlapping active bookings
 
 ### Booking Lifecycle
 
@@ -69,13 +105,13 @@ States and transitions:
      │ action_complete()
      ↓
 ┌──────────┐
-│Completed │  (finished, final state)
+│Completed │  (booking has ended and was actually used)
 └──────────┘
 
 ┌──────────┐
 │Requested │  (can also cancel before confirming)
 └────┬─────┘
-     │ action_cancel()
+     │ Provide cancellation reason
      ↓
 ┌──────────┐
 │Cancelled │  (abandoned, final state)
@@ -83,17 +119,19 @@ States and transitions:
 ```
 
 Transitions enforced by:
-- Button visibility in form (state-based with `states="..."` attributes)
-- Database state field tracks current status
-- Activity log (mail.thread) records all transitions
+- Only valid state transitions are accepted by the model
+- Completion is available only after the scheduled end time
+- Cancellation requires a reason in a confirmation dialog
+- Activity log (`mail.thread`) records state changes
 
 ### Access Control
 
-**File**: `security/ir.model.access.csv`
+**Files**: `security/security.xml`, `security/ir.model.access.csv`
 
-Currently: **All authenticated users can CRUD bookings and resources**
-- All users (no group restriction) have full permissions
-- Can be refined later to restrict by role (e.g., Admin-only resource creation)
+- **Internal users**: read all resources and bookings (needed for conflict checks and the schedule); create bookings; edit/cancel/delete only their own (record rule on `user_id`)
+- **Room Booking Manager** (implied for Administrators): full CRUD on resources and on every booking
+- Portal/public users get no access
+- Trade-off: no per-resource approver or department scoping
 
 ### UI/UX Design
 
@@ -105,9 +143,18 @@ Currently: **All authenticated users can CRUD bookings and resources**
 - List view: Default view showing all bookings
 - Form view: Full booking details with:
   - Status bar (visual state indicator)
-  - Action buttons (Confirm, Complete, Cancel)
+  - Inline red validation feedback for invalid times, unavailable resources, and conflicts
+  - Action buttons (Confirm when valid, Complete after end time, Cancel with a required reason)
   - Chatter section for activity tracking and comments
   - Time picker for start/end times
+
+**Schedule**:
+- Separate Schedule menu opens a native Odoo calendar view, defaulting to the week
+- Filter bookings by room/resource using the calendar filter panel
+- Creating from the calendar opens the full booking form so a resource must be selected
+- Requested bookings are red, confirmed bookings light purple, and completed bookings gray
+- Cancelled bookings are hidden from the schedule but remain available in the Bookings list
+- The calendar displays the booking model directly; it does not create duplicate events in Odoo's separate Calendar app
 
 **Search & Filters**:
 - Quick filters: by state (Requested, Confirmed, Completed, Cancelled)
@@ -120,7 +167,9 @@ Currently: **All authenticated users can CRUD bookings and resources**
 - **Activity Tracking**: All state changes and notes appear in the chatter
 - **Comments**: Users can add comments to bookings
 - **Activity Log**: Built-in audit trail of who did what and when
-- **Future**: Calendar integration (Day 5-6) can display bookings in Odoo Calendar
+- **Upcoming Reminder**: A five-minute scheduled job checks for confirmed bookings starting within an hour and reminds the booking owner once. The assigned Odoo activity creates the in-app notification or email according to that user's notification preferences. Users who selected **Handle in Odoo** also receive the dedicated reminder email; users who selected email receive Odoo's activity notification email only, avoiding duplicates.
+- **Local Email Testing**: Docker Compose starts Mailpit at `http://localhost:8025`. Configure the local Odoo database's outgoing mail server to use host `mailpit`, port `1025`, leave the username and password empty, and use no connection encryption. This captures email locally and does not deliver it to real recipients. Configure this only in the local test database. The local `admin` test user is set to **Handle in Odoo** so you can see the Discuss notification as well as the email.
+- **Schedule**: A separate calendar view shows the same booking records by day, week, or month
 
 ## Simplified/Left Out & Why
 
@@ -134,15 +183,11 @@ Currently: **All authenticated users can CRUD bookings and resources**
    - Sufficient for MVP; can extend with `parent_id` field if needed
 
 3. **Approval Workflow**: No multi-level approvals
-   - Simple 2-state (Requested → Confirmed) vs. complex routing
+   - Simple Requested → Confirmed vs. complex routing
    - Adequate for internal team bookings
    - Can add manager approval using workflow engine if scaled
 
-4. **Notifications/Reminders**: Not in base
-   - Part of "Automation" bonus feature (will add in Day 6-7 if time)
-   - Would need cron job + email templates
-
-5. **Resource Maintenance/Blackout Dates**: Not included
+4. **Resource Maintenance/Blackout Dates**: Not included
    - Can be modeled as special "maintenance" bookings or a separate blackout_dates table
    - Deferred to V2
 
@@ -155,7 +200,10 @@ To test locally:
 4. Try creating an overlapping booking → should fail with conflict message
 5. Try booking outside availability (e.g., 8 PM) → should fail with window message
 6. Confirm booking → lifecycle progresses
-7. Add notes → appears in chatter
+7. Complete is available after the booking end time
+8. Cancel a booking and enter a reason
+9. Add notes → appears in chatter
+10. Confirm an upcoming booking and check the reminder activity, inbox notification, and captured email about an hour before its start time
 
 ## File Structure
 
@@ -167,11 +215,14 @@ room_booking/
 │   ├── __init__.py
 │   ├── resource.py                # Resource model + conflict/availability logic
 │   └── booking.py                 # Booking model + lifecycle + constraints
+│   └── cancel_wizard.py           # Required-reason cancellation dialog
 ├── views/
 │   ├── resource_views.xml         # Resource list & form + menu
-│   └── booking_views.xml          # Booking list, form, search + menu + actions
+│   └── booking_views.xml          # Booking list, form, search, schedule + menus/actions
 ├── security/
 │   └── ir.model.access.csv        # Access control (CRUD permissions)
+├── tests/
+│   └── test_booking.py            # Booking validation and lifecycle tests
 └── README.md                       # This file
 ```
 
@@ -184,17 +235,11 @@ room_booking/
 
 ## Next Steps (If Continuing)
 
-1. **Calendar View** (Bonus: Odoo Integration)
-   - Inherit from `calendar.event` to show bookings in Odoo Calendar
-   
-2. **Automation** (Bonus: Scheduled Logic)
-   - Cron job to auto-complete past bookings
-   - Email reminders before booking start time
+1. **Automation follow-up**
+   - Flag overdue bookings for manual completion rather than auto-completing them
 
-3. **AI Feature** (Bonus: AI-Powered)
-   - Conflict resolution suggestions
-   - Natural language booking entry
-   - Usage analytics/reports
+2. **AI Feature** (Bonus: AI-Powered)
+   - Turn a natural-language request into a reviewable booking draft, using an approved AI service
 
 4. **Reporting**
    - Booking utilization by resource
