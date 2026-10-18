@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- REQ: proper read/write/create/delete access control.
+     Custom: Room Booking Manager group and per-owner record rules.
+     Odoo built-in: res.groups, ir.rule and the group_user/group_system groups. -->
+<odoo>
+    <record id="group_room_booking_manager" model="res.groups">
+        <field name="name">Room Booking Manager</field>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Administrators manage resources and all bookings. -->
+    <record id="base.group_system" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_room_booking_manager'))]"/>
+    </record>
+
+    <!-- Internal users may read every booking (needed for conflict checks and
+         the schedule) but only create/edit/delete their own. -->
+    <record id="rule_room_booking_booking_own" model="ir.rule">
+        <field name="name">Room Booking: users change only their own bookings</field>
+        <field name="model_id" ref="model_room_booking_booking"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="False"/>
+    </record>
+
+    <record id="rule_room_booking_booking_manager" model="ir.rule">
+        <field name="name">Room Booking: managers change all bookings</field>
+        <field name="model_id" ref="model_room_booking_booking"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_room_booking_manager'))]"/>
+    </record>
+</odoo>

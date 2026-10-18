@@ -1,3 +1,6 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_room_booking_resource_all,Room/Equipment - All Users,model_room_booking_resource,,1,1,1,1
-access_room_booking_booking_all,Booking - All Users,model_room_booking_booking,,1,1,1,1
+access_room_booking_resource_user,Room/Equipment - Internal Users (read),model_room_booking_resource,base.group_user,1,0,0,0
+access_room_booking_resource_manager,Room/Equipment - Managers,model_room_booking_resource,group_room_booking_manager,1,1,1,1
+access_room_booking_booking_user,Booking - Internal Users,model_room_booking_booking,base.group_user,1,1,1,1
+access_room_booking_booking_manager,Booking - Managers,model_room_booking_booking,group_room_booking_manager,1,1,1,1
+access_room_booking_cancel_wizard_user,Booking Cancellation Wizard - Internal Users,model_room_booking_cancel_wizard,base.group_user,1,1,1,1
