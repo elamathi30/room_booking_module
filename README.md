@@ -28,10 +28,6 @@ the reminder job/template configuration and access entries. It does not create
 duplicate events in Odoo's separate Calendar app; the schedule displays these
 module's booking records in Odoo's calendar view.
 
-**Scope note:** Recurring reservations, multi-step approval, blackout dates and the 
-AI-powered feature are not implemented.
-
-
 ## Features (Base Requirements - Complete)
 
 ✅ **CRUD on Bookings**: Full read, create, update, delete operations with proper access control  
@@ -170,37 +166,30 @@ Transitions enforced by:
 
 ## Simplified/Left Out & Why
 
-1. **Recurring Bookings**: Not included
-   - Adds complexity to conflict detection (checking many dates)
-   - Most room bookings are one-off; recurring can be handled manually
-   - Can be added as enhancement using `rrule` library
-
-2. **Resource Categories/Hierarchies**: Kept simple
-   - Single resource type (not tree structure)
-   - Sufficient for MVP; can extend with `parent_id` field if needed
-
-3. **Approval Workflow**: No multi-level approvals
-   - Simple Requested → Confirmed vs. complex routing
-   - Adequate for internal team bookings
-   - Can add manager approval using workflow engine if scaled
-
-4. **Resource Maintenance/Blackout Dates**: Not included
-   - Can be modeled as special "maintenance" bookings or a separate blackout_dates table
-   - Deferred to V2
+- **Recurring bookings**: Bookings are individual reservations; recurrence rules
+  would add complexity to conflict checking.
+- **Resource hierarchy**: Resources have a simple type, but no parent/child
+  structure; that is unnecessary for the current scope.
+- **Multi-step approvals**: Bookings use a single Requested → Confirmed flow,
+  which is sufficient for a small internal team.
+- **Maintenance/blackout dates**: There is no separate way to block a resource
+  without creating a booking.
+- **AI-assisted booking**: Not implemented; it would require an external AI
+  service and is outside the scope of this module.
 
 ## Testing Notes
 
-To test locally:
-1. Install this module in your Odoo instance
-2. Create a Resource (e.g., "Conference Room A", 9 AM - 6 PM)
-3. Create a Booking (e.g., 10 AM - 11 AM on the same resource)
-4. Try creating an overlapping booking → should fail with conflict message
-5. Try booking outside availability (e.g., 8 PM) → should fail with window message
-6. Confirm booking → lifecycle progresses
-7. Complete is available after the booking end time
-8. Cancel a booking and enter a reason
-9. Add notes → appears in chatter
-10. Confirm an upcoming booking and check the reminder activity, inbox notification, and captured email about an hour before its start time
+Automated Odoo `TransactionCase` tests are in `room_booking/tests/test_booking.py`.
+They cover overlapping and back-to-back bookings, invalid time order and
+duration, availability hours, completion timing, cancellation reasons, terminal
+state transitions, access control, schedule colors, and one-time reminders
+(activity and email). These are implemented test cases; no code-coverage
+percentage has been measured.
+
+For a manual smoke test, install the module, create a resource and booking, then
+check conflict and availability validation, confirm/complete/cancel actions,
+chatter notes, and the reminder activity/email. The reminder job runs every
+five minutes and targets confirmed bookings starting within the next hour.
 
 ## File Structure
 
@@ -229,24 +218,3 @@ room_booking/
 - **Language**: Python 3.x
 - **Database**: PostgreSQL (Odoo's default)
 - **Frontend**: Odoo's built-in form/list views (XML-based)
-
-## Next Steps (If Continuing)
-
-1. **Automation follow-up**
-   - Flag overdue bookings for manual completion rather than auto-completing them
-
-2. **AI Feature** (Bonus: AI-Powered)
-   - Turn a natural-language request into a reviewable booking draft, using an approved AI service
-
-3. **Reporting**
-   - Booking utilization by resource
-   - User booking history
-   - Peak hours analysis
-
-## Author
-
-Built as an Odoo internship exercise.
-
-## License
-
-LGPL-3.0
