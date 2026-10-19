@@ -1,5 +1,26 @@
-# REQ: define bookable rooms/equipment, their availability windows, and
-# overlap lookup. Custom Odoo ORM model; uses Python and pytz for local hours.
+# Room Booking Resource Model
+# Stores room/equipment details, capacity, availability hours, and linked bookings.
+
+# Required validation logic:
+# 1. Availability start must be >= 0.
+# 2. Availability start must be earlier than availability end.
+# 3. Availability end must be <= 24.
+# 4. Capacity must be at least 1.
+
+# Required conflict-checking logic:
+# 5. Only check bookings for the same resource.
+# 6. Only requested and confirmed bookings block the time slot.
+# 7. Existing booking start_time < new booking end_time.
+# 8. Existing booking end_time > new booking start_time.
+#    Both conditions together detect overlapping time periods.
+# 9. Exclude the current booking when checking an update.
+
+# Required availability logic:
+# 10. Convert booking datetimes from UTC to the chosen timezone.
+# 11. Start and end must fall on the same local date.
+# 12. Start hour must be >= resource availability_start.
+# 13. End hour must be <= resource availability_end.
+
 import pytz
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError

@@ -1,5 +1,16 @@
-# REQ: cancellation must collect a non-blank reason and record it with the
-# cancelled state. Custom Python wizard using Odoo's built-in TransientModel.
+
+# Cancellation Wizard
+# Uses Odoo's TransientModel to provide a temporary cancellation form.
+# booking_id links the wizard to the booking being cancelled.
+# reason is required and must contain non-whitespace characters.
+
+# Cancellation logic:
+# 1. ensure_one() ensures only one wizard record is processed.
+# 2. (self.reason or '').strip() handles an empty value and removes surrounding spaces.
+# 3. If the cleaned reason is empty, raise ValidationError and stop cancellation.
+# 4. If valid, update the booking's state to 'cancelled' and save the reason.
+# 5. Close the wizard after the booking is updated.
+
 from odoo import fields, models
 from odoo.exceptions import ValidationError
 

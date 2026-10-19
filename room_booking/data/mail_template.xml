@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- EXTRA: custom one-hour booking reminder content rendered by Odoo's
-     built-in mail.template engine. -->
+
+     <!-- Extra feature: The email sent as a reminder about an hour before a confirmed booking starts.
+     The reminder cron job in booking.py picks the booking and sends this template,
+     so the wording lives here instead of in Python.
+     It only goes to users whose Odoo notification setting is "Handle in Odoo".
+     Users set to email already get Odoo's own activity email, so skipping them
+     avoids sending two. Times are shown in the booker's timezone. -->
+     
 <odoo>
     <data noupdate="1">
         <record id="mail_template_booking_reminder" model="mail.template">

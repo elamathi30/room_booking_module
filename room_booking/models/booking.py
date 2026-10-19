@@ -1,7 +1,41 @@
-# REQ: booking CRUD/data, generated references, duration, availability and
-# overlap validation, lifecycle transitions, and one-hour reminders.
-# Custom Python rules run on Odoo ORM/constraints; Odoo mail mixins, activities,
-# sequence, and scheduled-job APIs provide the integration points.
+# Room Booking Model
+# Defines the booking model, its fields, and booking-related logic.
+# Fields store booking details; computed fields calculate duration, validation messages,
+# action permissions, and calendar colours.
+# Validation checks time order, resource availability, and overlapping bookings.
+# State transitions control confirming, completing, and cancelling bookings.
+# Reminders are handled by a scheduled method using Odoo's mail/activity features.
+#
+# How it works:
+# - We define the model and fields using Odoo's Python ORM.
+# - Odoo loads the model through the module's __init__.py files.
+# - Odoo ORM methods interact with the database; we add custom business rules.
+# - XML files configure the sequence, reminder schedule, email template, and UI.
+
+# Required logic:
+# 1. Generate a unique booking reference using Odoo's sequence when the
+#    reference is 'New'.
+# 2. Calculate duration as (end_time - start_time) in hours; use 0 if
+#    either time is missing and prevent negative duration.
+# 3. End time must be strictly later than start time.
+# 4. Reject bookings if the resource is unavailable, the time falls outside
+#    its availability hours, or another active booking overlaps.
+# 5. Only requested and confirmed bookings count as conflicts; exclude the
+#    current booking when checking an update.
+# 6. Show validation messages with conflicting booking details in the user's
+#    timezone.
+# 7. Allow confirmation only when the booking is requested and has no
+#    validation errors; recheck validation when confirming.
+# 8. Allow completion only for confirmed bookings after their scheduled end.
+# 9. Allow cancellation from requested or confirmed states, and require a
+#    non-blank cancellation reason.
+# 10. Prevent invalid state transitions and reopening completed/cancelled
+#     bookings.
+# 11. Run a scheduled reminder check for confirmed bookings starting within
+#     the next hour that have not already been reminded.
+# 12. Create a reminder activity, send the configured email when applicable,
+#     and record the reminder time/status to avoid duplicate reminders.
+
 import logging
 from datetime import timedelta
 
@@ -11,8 +45,6 @@ from odoo.tools.misc import format_datetime
 
 
 _logger = logging.getLogger(__name__)
-
-
 class RoomBookingBooking(models.Model):
     REMINDER_LEAD_TIME = timedelta(hours=1)
 
@@ -129,7 +161,7 @@ class RoomBookingBooking(models.Model):
         readonly=True,
         copy=False,
     )
-    
+    #Generates a booking reference using ir.sequence when booking_reference is 'New'.
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
@@ -139,6 +171,9 @@ class RoomBookingBooking(models.Model):
                 )
         return super().create(vals_list)
 
+#calculates duration in hours 
+#Calculates (end_time - start_time) in hours. 
+# Returns 0.0 if either time is missing and uses max(0.0, ...) to prevent negative duration.
     @api.depends('start_time', 'end_time')
     def _compute_duration(self):
         """Calculate booking duration in hours."""
@@ -160,10 +195,13 @@ class RoomBookingBooking(models.Model):
         'resource_id.booking_ids.end_time',
         'resource_id.booking_ids.state',
     )
+
+    #Calls _get_validation_message() to calculate and display booking validation errors.
     def _compute_validation_message(self):
         for booking in self:
             booking.validation_message = booking._get_validation_message()
 
+    #Shows the Complete button only when the booking exists, is 'confirmed', has an end time, and end_time <= now.
     @api.depends('state', 'end_time')
     def _compute_can_complete(self):
         now = fields.Datetime.now()
@@ -174,7 +212,7 @@ class RoomBookingBooking(models.Model):
                 and booking.end_time
                 and booking.end_time <= now
             )
-
+    #Shows the Confirm button only when the booking has an ID, its state is 'requested', and validation_message is empty.
     @api.depends('state', 'validation_message')
     def _compute_can_confirm(self):
         for booking in self:
@@ -184,6 +222,7 @@ class RoomBookingBooking(models.Model):
                 and not booking.validation_message
             )
 
+    #Shows the Cancel button only when the booking exists and its state is 'requested' or 'confirmed'.
     @api.depends('state')
     def _compute_can_cancel(self):
         for booking in self:
@@ -191,6 +230,7 @@ class RoomBookingBooking(models.Model):
                 bool(booking.id) and booking.state in ('requested', 'confirmed')
             )
 
+    #Sets the calendar color based on the booking state.
     @api.depends('state')
     def _compute_calendar_color(self):
         colors = {
@@ -207,6 +247,8 @@ class RoomBookingBooking(models.Model):
         total_minutes = round(hour * 60)
         return f'{total_minutes // 60:02d}:{total_minutes % 60:02d}'
 
+    #Checks that both times exist, end time is later than start time, resource is available, booking is within availability hours, and no conflicting booking exists. 
+    # Returns an error message when a check fails.
     def _get_validation_message(self):
         self.ensure_one()
         if not self.start_time or not self.end_time:
@@ -249,7 +291,8 @@ class RoomBookingBooking(models.Model):
                 'Choose another time or resource.'
             )
         return False
-
+    
+#Uses @api.constrains to reject a booking when end_time <= start_time.
     @api.constrains('start_time', 'end_time')
     def _check_times(self):
         """Ensure end_time is after start_time."""
@@ -259,7 +302,7 @@ class RoomBookingBooking(models.Model):
                     raise ValidationError(
                         'End time must be later than start time.'
                     )
-    
+    #Uses @api.constrains to enforce resource availability and overlap rules when the booking's times or resource change.
     @api.constrains('start_time', 'end_time', 'resource_id')
     def _check_availability_and_conflicts(self):
         """
@@ -273,7 +316,7 @@ class RoomBookingBooking(models.Model):
             message = booking._get_validation_message()
             if message:
                 raise ValidationError(message)
-
+    #Enforces permitted state transitions and requires a cancellation reason when changing the state to 'cancelled'.
     def write(self, vals):
         if 'state' in vals:
             allowed_transitions = {
@@ -302,6 +345,7 @@ class RoomBookingBooking(models.Model):
                     )
         return super().write(vals)
 
+    #Rechecks the validation message before allowing a booking to become 'confirmed'.
     def action_confirm(self):
         """Transition booking from Requested to Confirmed."""
         for booking in self:
@@ -309,7 +353,7 @@ class RoomBookingBooking(models.Model):
             if message:
                 raise ValidationError(message)
         self.write({'state': 'confirmed'})
-
+    #Searches for confirmed bookings starting within the reminder window that have not been reminded, creates an activity, sends an email when applicable, and records the reminder status/time.
     @api.model
     def _cron_send_booking_reminders(self, now=None):
         """Notify confirmed booking owners one hour before their booking."""
@@ -359,11 +403,11 @@ class RoomBookingBooking(models.Model):
                 'reminder_sent': True,
                 'reminder_sent_at': now,
             })
-    
+    # Rejects completion unless the booking is confirmed and its scheduled end time has passed.
     def action_complete(self):
         """Transition booking from Confirmed to Completed."""
         self.write({'state': 'completed'})
-    
+    # Opens the cancellation wizard for the booking, ensuring only requested or confirmed bookings can be cancelled.
     def action_cancel(self):
         """Open the cancellation-reason dialog."""
         self.ensure_one()
